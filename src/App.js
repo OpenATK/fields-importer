@@ -233,10 +233,14 @@ class App extends React.Component {
   }
 
   async doLogin() {
-    localStorage['oada.domain'] = this.state.domain;
+    let domain = this.state.domain;
+    if (typeof domain === 'string' && !domain.match(/^http/)) {
+      domain = 'https://'+domain;
+    }
+    localStorage['oada.domain'] = domain;
     const redirect = (process.env.NODE_ENV === 'production' ? udevcert.redirect_uris[2] : udevcert.redirect_uris[1]); // 2 is openatk.com, 1 is http://localhost:3000
     console.log('redirect = ', redirect);
-    const token = await getAccessTokenAsync(this.state.domain.replace(/^https:\/\//,''), { 
+    const token = await getAccessTokenAsync(domain.replace(/^https:\/\//,''), { 
       metadata: devcert, 
       scope: 'oada.fields:all',
       redirect
@@ -256,7 +260,6 @@ class App extends React.Component {
 
   domainChanged(evt) {
     let domain = evt.target.value;
-    if (!domain.match(/^http/)) domain = 'https://'+domain;
     this.setState({ domain });
   }
 
@@ -365,17 +368,17 @@ class App extends React.Component {
           </div>
           <div className='footer-bar-element'>
             <a href="http://trellisframework.org">
-              <img className='footer-logo' width='200px' src='logo-trellis.png'/>
+              <img className='footer-logo' width='200px' src='/fields-importer/logo-trellis.png'/>
             </a>
           </div>
           <div className='footer-bar-element'>
             <a href="http://oatscenter.org">
-              <img className='footer-logo' width='200px' src='logo-oats.png'/>
+              <img className='footer-logo' width='200px' src='/fields-importer/logo-oats.png'/>
             </a>
           </div>
           <div className='footer-bar-element'>
             <a href="http://oatscenter.org">
-              <img className='footer-logo' width='200px' src='logo-purdue.png'/>
+              <img className='footer-logo' width='200px' src='/fields-importer/logo-purdue.png'/>
             </a>
           </div>
           <div className='footer-bar-element'>
