@@ -2,6 +2,8 @@ import React from 'react';
 import oadaid from '@oada/oada-id-client/dist/browser';
 import devcert from './dev-cert/signed_software_statement.js';
 import udevcert from './dev-cert/unsigned_software_statement.js';
+import { Helmet } from 'react-helmet';
+import pkg from '../package.json';
 
 import './App.css';
 
@@ -268,6 +270,9 @@ class App extends React.Component {
     
     return (
       <div className="App" style={{ fontFamily: 'arial' }}>
+        <Helmet>
+          <title>OpenATK Fields Importer - v{pkg.version}</title>
+        </Helmet>
         <div style={{ backgroundColor: '#0066CC', color: '#FFFFFF', fontSize: '2em', padding: '5px', textAlign: 'left', display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
           <div>OpenAgToolkit Fields Importer</div>
           <div style={{flexGrow: 1}}></div>
