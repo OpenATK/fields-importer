@@ -1,3 +1,9 @@
+import debug from 'debug'
+
+const trace = debug('fields-importer#config:trace');
+const info = debug('fields-importer#config:info');
+const error = debug('fields-importer#config:error');
+
 export default async function() {
   const oadacert = require('@oada/oada-certs');
   const url = require('url');
@@ -12,12 +18,12 @@ export default async function() {
   async function getRedirectURIForCurrentLocation(cert)  {
     // If no cert was passed, just create a cert for this origin and return it
     if (!cert) {
-      console.log('No cert passed, must be in development mode.  Replacing dev-cert with one for this URL on the fly. loc = ', loc);
-      udevcert.redirect_uris = [ loc.href + '/oauth2/redirect.html' ];
-      console.log('New redirect_uris = ', udevcert.redirect_uris);
+      trace('No cert passed, must be in development mode.  Replacing dev-cert with one for this URL on the fly. loc = ', loc);
+      const href = loc.href.replace(/\/$/,''); // get rid of trailing slash
+      udevcert.redirect_uris = [ href + '/oauth2/redirect.html' ];
+      trace('New redirect_uris = ', udevcert.redirect_uris);
       const key = await oadacert.keys.create();
       devcert = await oadacert.sign(udevcert, key.private);
-      console.log('New signed devcert = ', devcert);
       return udevcert.redirect_uris[0];
     }
   
@@ -28,7 +34,7 @@ export default async function() {
       return (ru.protocol+'//'+ru.host) === (loc.protocol+'//'+loc.host);
     });
     if (index < 0) {
-      console.error('ERROR: could not find redirect_uri in developer certificate for this domain!');
+      error('ERROR: could not find redirect_uri in developer certificate for this domain!');
       return false;
     }
   
@@ -40,7 +46,7 @@ export default async function() {
   let redirect = false;
   // If not in production, auto-generate a dev cert based on URL
   if (process.env.NODE_ENV !== 'production') {
-    console.log('NODE_ENV = ', process.env.NODE_ENV);
+    info('NODE_ENV = ', process.env.NODE_ENV);
     redirect = await getRedirectURIForCurrentLocation(); // changes global devcert
     metadata = devcert;
   

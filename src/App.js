@@ -4,7 +4,7 @@ import React from 'react';
 //import udevcert from './dev-cert/unsigned_software_statement.js';
 import { Helmet } from 'react-helmet';
 import pkg from '../package.json';
-
+import debug from 'debug';
 import './App.css';
 
 import Promise from 'bluebird';
@@ -16,8 +16,18 @@ import togeojson from '@mapbox/togeojson';
 import tree from './tree';
 import configFunc from './config'
 
-let config = false; // will populate in async function later before connecting to oada
-//const getAccessTokenAsync = Promise.promisify(oadaid.getAccessToken);
+let config = configFunc(); // This is a promise, you have to await it if you want to use it later
+
+const trace = debug('fields-importer#app:trace');
+const info = debug('fields-importer#app:trace');
+const error = debug('fields-importer#app:trace');
+
+if (process.env.NODE_ENV !== 'production') {
+  info('NOT production, turning on all debugs');
+  localStorage.debug = "*";
+} else {
+  localStorage.debug = ""; // production turn off debugging
+}
 
 let con = false;
 
@@ -30,10 +40,6 @@ class App extends React.Component {
   constructor(props) {
     super(props);
 
-    let token = localStorage['oada.token'] || false;
-    if (token === 'false' || (typeof token === 'string' && token.length < 1)) {
-      token = false;
-    }
     let domain = localStorage['oada.domain'] || false;
     if (domain === 'false' || (typeof domain === 'string' && domain.length < 1)) {
       domain = false;
@@ -41,15 +47,35 @@ class App extends React.Component {
     if (domain && !domain.match(/^http/)) domain = 'https://'+domain;
 
     this.state = { 
-      showlogin: !token, // no token, show login
-      showdropzone: !!token, // have token, show dropzone
+      showlogin: true, // no token by default, show login, componentDidMount will correct if we have token
+      showdropzone: false, 
       showapproval: false,
       showcomplete: false,
       message: false,
       jobs: [],
       domain,
-      token: token,
+      token: false,
     };
+  }
+
+  async componentDidMount() {
+    // ask OADA if we have a token
+    let token = false;
+    if (this.state.domain) { 
+      token = await oada.getDomainToken(this.state.domain); //localStorage['oada.token'] || false;
+
+      if (token === 'false' || (typeof token === 'string' && token.length < 1)) {
+        token = false;
+      }
+    }
+
+    trace('componentDidMount: Setting state, token = ', JSON.stringify(token));
+    this.setState({
+      showlogin: !token,
+      showdropzone: !!token,
+      token,
+    });
+
   }
 
   async fetchAllRemoteGFF() {
@@ -180,13 +206,10 @@ class App extends React.Component {
     this.setState({ message: 'Connecting to OADA...' });
     this.setState({ showdropzone: false });
 
-    // Get the config, might create a dev cert:
-    if (!config) config = await configFunc();
-
     // Connect using a token from localstorage (should be handled by the cache itself already)
     console.log('Reusing token', this.state.token)
     con = await oada.connect({
-      token: this.state.token, 
+      token: this.state.token,  // token is cached in lib, use that one
       domain: this.state.domain, 
       cache: false
     });
@@ -238,47 +261,37 @@ class App extends React.Component {
   }
 
   async doLogin() {
-    // Get the config, might create a dev cert:
-    if (!config) config = await configFunc();
-
     let domain = this.state.domain;
     if (typeof domain === 'string' && !domain.match(/^http/)) {
       domain = 'https://'+domain;
     }
     localStorage['oada.domain'] = domain;
-    console.log('redirect = ', config.redirect);
 
+    const cfg = await config;
+    trace('redirect = ', config.redirect);
     // Get new token
     con = await oada.connect({
-      token: 'WSMmqwVzVo6uUT_OxMHmEtAz4RGS4tald1lRQZ-w',
       domain: this.state.domain, 
       cache: false,
       options: {
-        redirect: config.redirect,
-        metadata: config.metadata,
-        scope: config.scope,
+        redirect: cfg.redirect,
+        metadata: cfg.metadata,
+        scope: cfg.scope,
       },
-    })
+    });
 
-/*
-    const token = await getAccessTokenAsync(domain.replace(/^https:\/\//,''), { 
-      metadata: devcert, 
-      scope: 'oada.fields:all',
-      redirect
-    }).then(r=>r.access_token);
-    */
-    console.log(con);
     let token = con.token;
-    localStorage['oada.token'] = token;
     this.setState({
       token,
       showlogin: false,
       showdropzone: true,
     });
+    console.log('Have connection and token');
   }
 
-  doLogout() {
-    localStorage['oada.token'] = false;
+  async doLogout() {
+    console.log('Calling resetDomainCache...');
+    await oada.resetDomainCache(this.state.domain); // also clears the cached token
     this.setState({ showlogin: true, showdropzone: false, showcomplete: false, showapproval: false, token: false });
   }
 
