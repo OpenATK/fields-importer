@@ -55,5 +55,4 @@ export default async function() {
     metadata,
     scope: 'oada.fields:all',
   };
-
 }
