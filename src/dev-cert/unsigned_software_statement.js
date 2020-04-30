@@ -1,9 +1,7 @@
 module.exports = {
   redirect_uris: [
-    'https://localhost:3000/fields-importer/oauth2/redirect.html', 
-     'http://localhost:3000/fields-importer/oauth2/redirect.html', 
           'https://openatk.com/fields-importer/oauth2/redirect.html', 
-    'https://openatk.github.io/fields-importer/oauth2/redirect.html' 
+    'https://openatk.github.io/fields-importer/oauth2/redirect.html',
   ],
   token_endpoint_auth_method:
     'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',

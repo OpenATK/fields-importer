@@ -14,8 +14,9 @@ import oada from '@oada/oada-cache';
 import Dropzone from 'react-dropzone';
 import togeojson from '@mapbox/togeojson';
 import tree from './tree';
-import config from './config'
+import configFunc from './config'
 
+let config = false; // will populate in async function later before connecting to oada
 //const getAccessTokenAsync = Promise.promisify(oadaid.getAccessToken);
 
 let con = false;
@@ -185,6 +186,10 @@ class App extends React.Component {
   async droppedFiles(files) {
     this.setState({ message: 'Connecting to OADA...' });
     this.setState({ showdropzone: false });
+
+    // Get the config, might create a dev cert:
+    if (!config) config = await configFunc();
+
     // Connect using a token from localstorage (should be handled by the cache itself already)
     con = await oada.connect({
       token: this.state.token, 
@@ -237,21 +242,24 @@ class App extends React.Component {
   }
 
   async doLogin() {
+    // Get the config, might create a dev cert:
+    if (!config) config = await configFunc();
+
     let domain = this.state.domain;
     if (typeof domain === 'string' && !domain.match(/^http/)) {
       domain = 'https://'+domain;
     }
     localStorage['oada.domain'] = domain;
-    console.log('redirect = ', config.REDIRECT);
+    console.log('redirect = ', config.redirect);
 
     // Get new token
     con = await oada.connect({
       domain: this.state.domain, 
       cache: false,
       options: {
-        redirect: config.REDIRECT,
-        metadata: config.METADATA,
-        scope: config.SCOPE,
+        redirect: config.redirect,
+        metadata: config.metadata,
+        scope: config.scope,
       },
     })
 
@@ -388,17 +396,17 @@ class App extends React.Component {
           </div>
           <div className='footer-bar-element'>
             <a href="http://trellisframework.org">
-              <img className='footer-logo' width='200px' src='/fields-importer/logo-trellis.png'/>
+              <img className='footer-logo' alt='trellis' width='200px' src='/fields-importer/logo-trellis.png'/>
             </a>
           </div>
           <div className='footer-bar-element'>
             <a href="http://oatscenter.org">
-              <img className='footer-logo' width='200px' src='/fields-importer/logo-oats.png'/>
+              <img className='footer-logo' alt='oats' width='200px' src='/fields-importer/logo-oats.png'/>
             </a>
           </div>
           <div className='footer-bar-element'>
             <a href="http://oatscenter.org">
-              <img className='footer-logo' width='200px' src='/fields-importer/logo-purdue.png'/>
+              <img className='footer-logo' alt='purdue' width='200px' src='/fields-importer/logo-purdue.png'/>
             </a>
           </div>
           <div className='footer-bar-element'>
