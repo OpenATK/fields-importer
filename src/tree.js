@@ -19,13 +19,13 @@ export default {
           _type: "application/vnd.oada.farm.1+json",
           _rev: 0,
           grower: {
-            _type: "application/vnd.oada.grower.1+json",
+            _type: "application/vnd.oada.fields.1+json",
           }
         }
       },
       growers: {
         "*": {
-          _type: 'application/vnd.oada.grower.1+json',
+          _type: 'application/vnd.oada.fields.1+json',
           _rev: 0
         }
       }

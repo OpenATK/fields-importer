@@ -150,35 +150,28 @@ class App extends React.Component {
     this.setState({ message: 'Creating '+jobs.length+' resources in OADA' });
 
     const log = [];
+
     await Promise.map(jobs, async j => {
       const data = _.cloneDeep(j.data);
-      const path = `/resources/${data.id}`;
+      const path = `/bookmarks/fields/${j.type}s/${data.id}`;
       if (data.id) delete data.id; // not included in remote
-      if (data._id) delete data._id; // not included in remote
+      if (data.type) delete data.type;
+//      if (data._id) delete data._id; // not included in remote
       console.log('Creating resource, job = ', j);
-      await con.put({ path, data, headers: { 'content-type': `application/vnd.oada.${j.type === 'growers' ? 'fields' : j.type}.1+json` } });
+      console.log('Putting to path = ', path);
+      try {
+        await con.put({ 
+          path, 
+          data, 
+          tree
+        });
+      } catch (err) {
+       console.log('errored on ', data) 
+      }
       log.push({ resource: path, action: 'create', type: j.type, data });
     }, { concurrency: 5 });
- 
-    this.setState({ message: 'Linking to new resources' });
-    console.log('Created all the resources, now putting links to each of the master lists');
-    await Promise.map(['growers', 'farms', 'fields'], async lt => {
-      const jobsthistype = _.filter(jobs, j => j.listtype === lt);
-      if (jobsthistype && jobsthistype.length < 1) {
-        console.log('No '+lt+' added, not updating master lst');
-        return;
-      }
-      const data = _.reduce(jobsthistype, (acc,j) => {
-        acc[j.data.id] = { _id: `resources/${j.data.id}`, _rev: 0 };
-        return acc;
-      }, {});
-      const path = `/bookmarks/fields/${lt}`;
-      await con.put({ path, data, headers: { 'content-type': `application/vnd.oada.${lt === 'growers' ? 'fields' : lt}.1+json` } });
-      log.push({ resource: `/bookmarks/fields/${lt}`, action: 'put', type: lt, data });
-    });
-  
+
     this.setState({ showcomplete: true });
-    console.log('Posted all links to each list type');
     return log;
   }
 
@@ -186,6 +179,7 @@ class App extends React.Component {
     this.setState({ message: 'Connecting to OADA...' });
     this.setState({ showdropzone: false });
     // Connect using a token from localstorage (should be handled by the cache itself already)
+    console.log('Reusing token', this.state.token)
     con = await oada.connect({
       token: this.state.token, 
       domain: this.state.domain, 
@@ -193,10 +187,12 @@ class App extends React.Component {
     });
   
     files.forEach(async f => {
+    /*
       console.log('Ensuring growers, farms, fields base paths exist on remote');
       await Promise.map(['grower', 'farms', 'fields'], lt => 
         con.put({ path: `/bookmarks/fields/${lt}`, tree, data: {}, headers: { 'content-type': `application/vnd.oada.${lt}.1+json` } })
       );
+      */
   
       const { geojson, remote } = await Promise.props({
         // Read and convert local file to geojson
@@ -246,6 +242,7 @@ class App extends React.Component {
 
     // Get new token
     con = await oada.connect({
+      token: 'WSMmqwVzVo6uUT_OxMHmEtAz4RGS4tald1lRQZ-w',
       domain: this.state.domain, 
       cache: false,
       options: {
