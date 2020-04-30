@@ -1,5 +1,5 @@
 import React from 'react';
-import oadaid from '@oada/oada-id-client/dist/browser';
+//import oadaid from '@oada/oada-id-client';
 import devcert from './dev-cert/signed_software_statement.js';
 import udevcert from './dev-cert/unsigned_software_statement.js';
 import { Helmet } from 'react-helmet';
@@ -15,7 +15,7 @@ import Dropzone from 'react-dropzone';
 import togeojson from '@mapbox/togeojson';
 import tree from './tree';
 
-const getAccessTokenAsync = Promise.promisify(oadaid.getAccessToken);
+//const getAccessTokenAsync = Promise.promisify(oadaid.getAccessToken);
 
 let con = false;
 
@@ -155,7 +155,7 @@ class App extends React.Component {
       if (data.id) delete data.id; // not included in remote
       if (data._id) delete data._id; // not included in remote
       console.log('Creating resource, job = ', j);
-      await con.put({ path, data, headers: { 'content-type': `application/vnd.oada.${j.type}.1+json` } });
+      await con.put({ path, data, headers: { 'content-type': `application/vnd.oada.${j.type === 'growers' ? 'fields' : j.type}.1+json` } });
       log.push({ resource: path, action: 'create', type: j.type, data });
     }, { concurrency: 5 });
  
@@ -172,7 +172,7 @@ class App extends React.Component {
         return acc;
       }, {});
       const path = `/bookmarks/fields/${lt}`;
-      await con.put({ path, data, headers: { 'content-type': `application/vnd.oada.${lt}.1+json` } });
+      await con.put({ path, data, headers: { 'content-type': `application/vnd.oada.${lt === 'growers' ? 'fields' : lt}.1+json` } });
       log.push({ resource: `/bookmarks/fields/${lt}`, action: 'put', type: lt, data });
     });
   
@@ -184,8 +184,11 @@ class App extends React.Component {
   async droppedFiles(files) {
     this.setState({ message: 'Connecting to OADA...' });
     this.setState({ showdropzone: false });
+    // Connect using a token from localstorage (should be handled by the cache itself already)
     con = await oada.connect({
-      token: this.state.token, domain: this.state.domain, cache: false
+      token: this.state.token, 
+      domain: this.state.domain, 
+      cache: false
     });
   
     files.forEach(async f => {
@@ -240,11 +243,27 @@ class App extends React.Component {
     localStorage['oada.domain'] = domain;
     const redirect = (process.env.NODE_ENV === 'production' ? udevcert.redirect_uris[2] : udevcert.redirect_uris[1]); // 2 is openatk.com, 1 is http://localhost:3000
     console.log('redirect = ', redirect);
+
+    // Get new token
+    con = await oada.connect({
+      domain: this.state.domain, 
+      cache: false,
+      options: {
+        redirect: "http://localhost:3000/fields-importer/oauth2/redirect.html",
+        metadata:"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InluMjJ1akJVQ0VlbE5VUnJhOW9na2hlRDJLRVhvbGprc21BVnFGcTBMUGciLCJqd2siOnsia3R5IjoiUlNBIiwia2lkIjoieW4yMnVqQlVDRWVsTlVScmE5b2draGVEMktFWG9samtzbUFWcUZxMExQZyIsIm4iOiJycjM4aUs4RmkwXy1DUkxUdlZLNElJQ2xhcmlpNndWSHBFN3paUFhvRVJsX09vaDY0WW1iUWNSYTVlRncwVVFoVXZFQ2hLdTlObzNqbTdMVzlaY0wxSEtyaGtVVy1PUW9iT1hVbnJDZ29DcGE4VlloX3dSSWRRWWJzdlBRVmo1Tkd1dU5YYVpCX19weEZ5LW5fTzJJTVM4T0dyZXptM2JRSERBZi1qbmdJaFpHWmdMYXZMSnlTSFV5RFFMNEZiUTZEM1F6M0FNT3J4RnZhNEtCSVBDUUtGT21ZWFZuNHp0Z1Q2OGhneU1vYzFLeXR4b1JnelZIbkNkVHBQV1dWcm5NRmNKZWRZRC1MbWswWG81cmpZT3htcThBMWVqZnhQTWVSXzNWNzhBSmsyTERJNHZHYUozZm5hUFpTN0N2VzhGM3BXV2lqX0J5VkdDSS01QnJrcUhfblEiLCJlIjoiQVFBQiJ9fQ.eyJyZWRpcmVjdF91cmlzIjpbImh0dHBzOi8vbG9jYWxob3N0OjMwMDAvZmllbGRzLWltcG9ydGVyL29hdXRoMi9yZWRpcmVjdC5odG1sIiwiaHR0cDovL2xvY2FsaG9zdDozMDAwL2ZpZWxkcy1pbXBvcnRlci9vYXV0aDIvcmVkaXJlY3QuaHRtbCIsImh0dHBzOi8vb3BlbmF0ay5jb20vZmllbGRzLWltcG9ydGVyL29hdXRoMi9yZWRpcmVjdC5odG1sIiwiaHR0cHM6Ly9vcGVuYXRrLmdpdGh1Yi5pby9maWVsZHMtaW1wb3J0ZXIvb2F1dGgyL3JlZGlyZWN0Lmh0bWwiXSwidG9rZW5fZW5kcG9pbnRfYXV0aF9tZXRob2QiOiJ1cm46aWV0ZjpwYXJhbXM6b2F1dGg6Y2xpZW50LWFzc2VydGlvbi10eXBlOmp3dC1iZWFyZXIiLCJncmFudF90eXBlcyI6WyJhdXRob3JpemF0aW9uX2NvZGUiXSwicmVzcG9uc2VfdHlwZXMiOlsidG9rZW4iLCJjb2RlIiwiaWRfdG9rZW4iLCJpZF90b2tlbiB0b2tlbiIsImNvZGUgaWRfdG9rZW4iLCJjb2RlIHRva2VuIiwiY29kZSBpZF90b2tlbiB0b2tlbiJdLCJjbGllbnRfbmFtZSI6Ik9wZW5BVEsgRmllbGRzIEltcG9ydGVyIiwiY2xpZW50X3VyaSI6Imh0dHBzOi8vb3BlbmF0ay5jb20vZmllbGRzLWltcG9ydGVyIiwiY29udGFjdHMiOlsiQWFyb24gQXVsdCA8YXVsdGFjQHB1cmR1ZS5lZHU-Il0sImp3a3MiOnsia2V5cyI6W3sia3R5IjoiUlNBIiwia2lkIjoiZjdmODBkMGRkZTk5NGRjMGFlNzBlYWU1M2E1MzMxYjIiLCJlIjoiQVFBQiIsIm4iOiJ4eTV5YWRKZnpiS1FuYVJGcnJBbmVwWU56Z0VRemtXTE4yRUtSQThFSkplN2F5elFVMWxzOXgwckIxa0YxYWlkUGVSY3E3YVVMLVNIYjNFdlFyRHhaR1BDWElYYzVXWlBEUTRabmduR2JHdU90bHFHV2tIVFZIc1pRYTZjSkZ2U21qN3hCWHVCd1hNMFJ0SFNaSWN5V0ptY0xPWW15Umt4ay1QSFpCYXlMTzgzZ1RnMlBxZmMxVEdpRmN5bUotQk4wTWpjT2NlQ0MyRzB2aEhfWHI0dlktOTQzeHI2eS1meTdvMFQ2S1Y2dm1IaW45Y1R4clRja2U3Y2cwZ2tzNmZtYzhiLWdkdFFpWjBYOHEyMmN3YXJXZFVLV1pOekxSRmpNMzhXb0x3NFFhVlhZaFBJbTc2N3NyVlhGQ1F0MlQ5bnNuTy1UMXYzUUNqTzc4S2pPVFFjSHcifV19fQ.qfFVmPOfVTvvBUzc9Ib7ZUFwsnKeT7XF7t6gr0CiPVR89jyeWDmKcbFAQskR7UeBCD3gNKma3AGvUpZrtlSSy4WYdavES7e5lp5YINB3xPD4FcafLJRLVV7tTLrbRZbDD1-Kg43sjl5mR4Ze-gEdA5ODId4NRWaibeFLJ_lzc7neWNZh4UbqupvautaytbzV_2Z-xs1wLirObm_LsQCBkknyfpwMbDUynxQMB4Qg9bMvN3KFC1LIFPng2xLfP7pPIU8SmmBkLTWX7Wx2vN5GtCM2p1ut0E8Zvq7IeWJ2QZvvy7Ouy_5e6TXux9QD_mrfpe8XhifD71xowkJast24GA",
+        scope: "oada.yield:all",
+      },
+    })
+
+/*
     const token = await getAccessTokenAsync(domain.replace(/^https:\/\//,''), { 
       metadata: devcert, 
       scope: 'oada.fields:all',
       redirect
     }).then(r=>r.access_token);
+    */
+    console.log(con);
+    let token = con.token;
     localStorage['oada.token'] = token;
     this.setState({
       token,
@@ -339,10 +358,11 @@ class App extends React.Component {
                 </div>
             }
             {_.map(['growers', 'farms', 'fields'], t => {
+              console.log("WTF APPROVALS", t, approvals[t])
               if (approvals[t].length < 1) return null;
               return (
-                <div>
-                  <div  style={{ textAlign: 'left', padding: '5px', fontWeight: 'bold', fontSize: '1.5em' }}>{capitalizeFirstLetter(t)}:</div>
+                <div key={t+'-list'}>
+                  <div style={{ textAlign: 'left', padding: '5px', fontWeight: 'bold', fontSize: '1.5em' }}>{capitalizeFirstLetter(t)} ({approvals[t].length} new):</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', flexDirection: 'row' }}>
                     {_.map(approvals[t], (f,i) => 
                       <div key={'approval'+t+i} style={{ padding: '5px', margin: '5px', borderRadius: '2px', border: '1px solid #EEEEEE' }}>
