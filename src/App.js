@@ -26,7 +26,7 @@ if (process.env.NODE_ENV !== 'production') {
   info('NOT production, turning on all debugs');
   localStorage.debug = "*";
 } else {
-  localStorage.debug = ""; // production turn off debugging
+  localStorage.debug = "*info*,*warn*,*error*"; // production turn off debugging
 }
 
 let con = false;
@@ -80,18 +80,23 @@ class App extends React.Component {
 
   async fetchAllRemoteGFF() {
     this.setState({ message: 'Fetching your current fields...'});
-    const root = await con.get({path: '/bookmarks/fields'}).then(r => r.data);
+    const root = await con.get({path: '/bookmarks/fields'}).then(r => r.data).catch(e => {error('/bookmarks/fields does not exist!'); return false});
+    if (!root) return { growers: [], farms: [], fields: [] };
+
     const { growers, farms, fields } = await Promise.props({
       growers: Promise.reduce(_.keys(root.growers), async (acc,g) => { 
-                 acc[g] = await con.get({ path: `/bookmarks/fields/growers/${g}` }).then(r=>r.data); 
+                 const result = await con.get({ path: `/bookmarks/fields/growers/${g}` }).then(r=>r.data).catch(e => {error(`Grower ${g} doesn't exist!`); return false}); 
+                 if (result) acc[g] = result;
                  return acc;
                }, {}, { concurrency: 5 } ),
         farms: Promise.reduce(_.keys(root.farms),   async (acc,f) => { 
-                 acc[f] = await con.get({ path: `/bookmarks/fields/farms/${f}` }).then(r=>r.data); 
+                 const result = await con.get({ path: `/bookmarks/fields/farms/${f}` }).then(r=>r.data).catch(e => {error(`Farm ${f} doesn't exist!`); return false}); 
+                 if (result) acc[f] = result;
                  return acc 
                }, {}, { concurrency: 5 } ),
        fields: Promise.reduce(_.keys(root.fields),  async (acc,f) => { 
-                 acc[f] = await con.get({ path: `/bookmarks/fields/fields/${f}` }).then(r=>r.data); 
+                 const result = await con.get({ path: `/bookmarks/fields/fields/${f}` }).then(r=>r.data).catch(e => {error(`Field ${f} doesn't exist!`); return false}); 
+                 if (result) acc[f] = result;
                  return acc 
                }, {}, { concurrency: 5 } ),
     });
@@ -173,7 +178,7 @@ class App extends React.Component {
   }
 
   async putAllJobsToOADA(jobs) {
-    console.log('Have '+jobs.length+' jobs to do, creating all the resources');
+    info('Have '+jobs.length+' jobs to do, creating all the resources');
     this.setState({ message: 'Creating '+jobs.length+' resources in OADA' });
 
     const log = [];
@@ -183,9 +188,8 @@ class App extends React.Component {
       const path = `/bookmarks/fields/${j.type}s/${data.id}`;
       if (data.id) delete data.id; // not included in remote
       if (data.type) delete data.type;
-//      if (data._id) delete data._id; // not included in remote
-      console.log('Creating resource, job = ', j);
-      console.log('Putting to path = ', path);
+      trace('Creating resource, job = ', j);
+      trace('Putting to path = ', path);
       try {
         await con.put({ 
           path, 
@@ -193,10 +197,14 @@ class App extends React.Component {
           tree
         });
       } catch (err) {
-       console.log('errored on ', data) 
+        const errors = this.state.errors || [];
+        errors.push({ job: j });
+        this.setState({ errors });
+        error('errored on job ', j, 'error was: ', err) 
       }
       log.push({ resource: path, action: 'create', type: j.type, data });
-    }, { concurrency: 5 });
+      this.setState({message: `${log.length} jobs handled so far, ${jobs.length-log.length} left to go.`});
+    }, { concurrency: 1 });
 
     this.setState({ showcomplete: true });
     return log;
@@ -207,7 +215,7 @@ class App extends React.Component {
     this.setState({ showdropzone: false });
 
     // Connect using a token from localstorage (should be handled by the cache itself already)
-    console.log('Reusing token', this.state.token)
+    trace('Reusing token', this.state.token)
     con = await oada.connect({
       token: this.state.token,  // token is cached in lib, use that one
       domain: this.state.domain, 
@@ -215,27 +223,20 @@ class App extends React.Component {
     });
   
     files.forEach(async f => {
-    /*
-      console.log('Ensuring growers, farms, fields base paths exist on remote');
-      await Promise.map(['grower', 'farms', 'fields'], lt => 
-        con.put({ path: `/bookmarks/fields/${lt}`, tree, data: {}, headers: { 'content-type': `application/vnd.oada.${lt}.1+json` } })
-      );
-      */
-  
       const { geojson, remote } = await Promise.props({
         // Read and convert local file to geojson
         geojson: new Promise((resolve,reject) => {
-          console.log('Reading local KML file and converting to goejson');
+          info('Reading local KML file and converting to goejson');
           const reader = new FileReader()
-          reader.onabort = () => { console.log('file reading was aborted'); reject(); }
-          reader.onerror = () => { console.log('file reading has failed');  reject(); }
+          reader.onabort = () => { error('file reading was aborted'); reject(); }
+          reader.onerror = () => { error('file reading has failed');  reject(); }
           reader.onload = async () => {
             const binaryStr = reader.result;
             const domparser = new DOMParser();
             const kml = domparser.parseFromString(binaryStr, 'text/xml');
             const geojson = togeojson.kml(kml);
-            console.log('kml = ', kml, ', geojson = ', geojson);
-            console.log('Extracting growers, farms, fields locally...');
+            trace('kml = ', kml, ', geojson = ', geojson);
+            info('Extracting growers, farms, fields locally...');
             resolve(geojson);
           }
           reader.readAsText(f);
@@ -246,16 +247,16 @@ class App extends React.Component {
       });
  
       this.setState({ message: 'Comparing KML with what you have to decide if anything is new' });
-      console.log('Harmonizing local GFF with remote GFF, remote = ', remote);
+      info('Harmonizing local GFF with remote GFF, remote = ', remote);
       const local = this.geoJSONToOADA({geojson, remote});
   
-      console.log('Preparing to update remote, Final local gff = ', local);
+      trace('Preparing to update remote, Final local gff = ', local);
       const jobs = await this.constructJobList(local);
       this.setState({
         jobs, showapproval: true, message: false,
       });
       
-      console.log('Done!');
+      info('Done!');
     })
 
   }
@@ -270,27 +271,32 @@ class App extends React.Component {
     const cfg = await config;
     trace('redirect = ', config.redirect);
     // Get new token
-    con = await oada.connect({
-      domain: this.state.domain, 
-      cache: false,
-      options: {
-        redirect: cfg.redirect,
-        metadata: cfg.metadata,
-        scope: cfg.scope,
-      },
-    });
+    try {
+      con = await oada.connect({
+        domain: this.state.domain, 
+        cache: false,
+        options: {
+          redirect: cfg.redirect,
+          metadata: cfg.metadata,
+          scope: cfg.scope,
+        },
+      });
 
-    let token = con.token;
-    this.setState({
-      token,
-      showlogin: false,
-      showdropzone: true,
-    });
-    console.log('Have connection and token');
+      let token = con.token;
+      this.setState({
+        token,
+        showlogin: false,
+        showdropzone: true,
+      });
+      trace('Have connection and token: ', token);
+    } catch(e) {
+      error('Connect failed!  error was: ', e);
+      this.setState({message: 'Connection failed, please try again later.'});
+    }
   }
 
   async doLogout() {
-    console.log('Calling resetDomainCache...');
+    info('Calling resetDomainCache...');
     await oada.resetDomainCache(this.state.domain); // also clears the cached token
     this.setState({ showlogin: true, showdropzone: false, showcomplete: false, showapproval: false, token: false });
   }
@@ -376,7 +382,6 @@ class App extends React.Component {
                 </div>
             }
             {_.map(['growers', 'farms', 'fields'], t => {
-              console.log("WTF APPROVALS", t, approvals[t])
               if (approvals[t].length < 1) return null;
               return (
                 <div key={t+'-list'}>
@@ -394,11 +399,19 @@ class App extends React.Component {
           </div>
         }
 
+        {!this.state.errors || this.state.errors.length < 1 ? null :
+          <div style={{color: 'red', display: 'flex', flexDirection: 'column' }}>
+            There are some errors in processing, please drop your KML again to fix.
+            {_.map(this.state.errors, (e,i) => <div key={'error'+i}>{e.job.type}: {e.job.data.name}</div>)}
+          </div>
+        }
+
         {!this.state.showcomplete ? null : 
           <div style={{color: 'green' }}>
             Complete!
           </div>
         }
+
 
         <div className='footer-bar' style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', flexWrap: 'wrap', position: 'absolute', bottom: '0px', width: '99vw' }}>
           <div className='footer-bar-element'>
