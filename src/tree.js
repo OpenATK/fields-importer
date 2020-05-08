@@ -9,9 +9,6 @@ export default {
         "*": {
           _type: "application/vnd.oada.field.1+json",
           _rev: 0,
-          farm: {
-            _type: "application/vnd.oada.farm.1+json",
-          }
         }
       },
       farms: {

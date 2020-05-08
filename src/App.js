@@ -143,7 +143,7 @@ class App extends React.Component {
       // remote and will have to be created. The eventually created link will be at resources/<id>
       // i.e. we will re-use the UUID keys as their resourceid
       farm.grower = { _id: grower._id || `resources/${grower.id}` };
-      field.farm = { _id: farm._id || `resources/${farm.id}` };
+      field.farm = farm.id;
   
       // Store grower, farm, field, in accumulator
       acc.growers[grower.id] = grower;
@@ -175,28 +175,47 @@ class App extends React.Component {
   async putAllJobsToOADA(jobs) {
     console.log('Have '+jobs.length+' jobs to do, creating all the resources');
     this.setState({ message: 'Creating '+jobs.length+' resources in OADA' });
+    let oadaFarms = {};
 
     const log = [];
+    await Promise.each(['growers', 'farms', 'fields'], async lt => {
+      const jobsthistype = _.filter(jobs, j => j.listtype === lt);
+      await Promise.each(jobsthistype, async j => {
+        const data = _.cloneDeep(j.data);
+  
+        if (j.type === 'field' && data.farm) {
+          console.log(data.farm);
+          let farmId = oadaFarms[data.farm];
+          console.log(farmId);
+          data.farm = {_id: farmId.replace('\/resources', 'resources')}
+          console.log('creating this link', data.farm)
+        }
 
-    await Promise.map(jobs, async j => {
-      const data = _.cloneDeep(j.data);
-      const path = `/bookmarks/fields/${j.type}s/${data.id}`;
-      if (data.id) delete data.id; // not included in remote
-      if (data.type) delete data.type;
-//      if (data._id) delete data._id; // not included in remote
-      console.log('Creating resource, job = ', j);
-      console.log('Putting to path = ', path);
-      try {
-        await con.put({ 
-          path, 
-          data, 
-          tree
-        });
-      } catch (err) {
-       console.log('errored on ', data) 
-      }
-      log.push({ resource: path, action: 'create', type: j.type, data });
-    }, { concurrency: 5 });
+        const path = `/bookmarks/fields/${j.type}s/${data.id}`;
+        let tempid = data.id
+        if (data.id) delete data.id; // not included in remote
+        if (data.type) delete data.type;
+  //      if (data._id) delete data._id; // not included in remote
+        console.log('Creating resource, job = ', j);
+        console.log('Putting to path = ', path);
+        try {
+          let oadaResponse = await con.put({ 
+            path, 
+            data, 
+            tree
+          });
+
+          if (j.type === 'farm') {
+            oadaFarms[tempid] = oadaResponse.headers['content-location'];
+            console.log('found a farm', tempid, oadaFarms[tempid])
+          }
+        } catch (err) {
+         console.log('errored on ', data, path);
+         console.log(err)
+        }
+        log.push({ resource: path, action: 'create', type: j.type, data });
+      })
+    })
 
     this.setState({ showcomplete: true });
     return log;
